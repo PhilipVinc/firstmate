@@ -1381,6 +1381,9 @@ bin/fm-herdr-lab.sh run "$LAB" plugin pane close w2:p4
 Three seconds after that close the plugin had not re-added its pane and the active workspace and tab were unchanged.
 Herdr 0.9.1 keeps the plugin-pane registration server-side (`plugin_panes` in its `v0.9.1` source) and exposes no read-only field for it, so the refusing close is the identity check.
 With the plugin later disabled, a third lab ran the adapter's projected create, projected kill, flat create, label discovery, and flat kill through the helper; the projection converged to one task pane, both workspaces were removed, and the default-session tripwire held.
+The flat-path plugin prune has no live evidence: flat create, label discovery, bare-selector resolution, husk respawn, and kill with a plugin pane docked were never run against a real Herdr with the plugin enabled.
+Herdr keeps plugin installation and enabled state global to the user across every session, and the only relocation, `XDG_CONFIG_HOME`, also moves the default session that the lab helper's tripwire must observe, so a plugin cannot be enabled for one lab without changing the operator's live configuration.
+Those flat shapes, and the late-dock settle on both paths, are pinned only by the stateful-fake regressions.
 `tests/fm-backend-herdr.test.sh` pins the docked-plugin and unregistered-split shapes.
 
 ### Attached foreground viewer
