@@ -194,10 +194,10 @@ A Herdr plugin can add its own pane to every new tab from a `workspace.created` 
 Such a pane is never the task's endpoint, so Firstmate never adopts, sends to, or captures it.
 Firstmate removes it only through `herdr plugin pane close`, which checks Herdr's own plugin-pane registration in the same request and refuses any pane no plugin opened; labels, titles, and pane tokens are never identity.
 The flat task-tab create, the seeded-tab prune, the projected-workspace convergence, the focus-preserving projection close, and the task kill each prune registered plugin panes from their one exact tab before judging its shape or closing the task pane, so flat and projected task tabs alike hold exactly one task pane and no task leaves a plugin-only tab or workspace behind.
-Because a hook can dock its pane asynchronously, the projected convergence accepts the one-pane shape only after it holds on one more bounded prune-and-read round.
+Because a hook can dock its pane asynchronously, both the flat create and the projected convergence (`fm_backend_herdr_tab_settle_plugin_panes`) accept the task tab's one-pane shape only after it holds on one more bounded prune-and-read round; a flat spawn whose tab keeps an unregistered pane still succeeds and leaves that pane alone.
 A pane beside the task pane that Herdr does not register to a plugin, such as a captain's split, is never closed: a projection with one stays unconverged and quarantined, and a flat task close leaves that tab in place.
 A tab holding more than one pane never resolves to a single endpoint by position, because a left-docked pane lists first; restart husk replacement and label-based recovery discovery therefore treat such a tab as ambiguous.
-`bin/backends/herdr.sh` owns the mechanics in `fm_backend_herdr_tab_prune_plugin_panes`, and `tests/fm-backend-herdr.test.sh` pins the docked, late-docked, and unregistered-split shapes, plus flat recovery and husk respawn past a docking plugin, against its stateful fake.
+`bin/backends/herdr.sh` owns the mechanics in `fm_backend_herdr_tab_prune_plugin_panes`, and `tests/fm-backend-herdr.test.sh` pins the docked, flat and projected late-docked, and unregistered-split shapes, plus flat recovery and husk respawn past a docking plugin, against its stateful fake.
 
 ## Default-tab prune safety
 
