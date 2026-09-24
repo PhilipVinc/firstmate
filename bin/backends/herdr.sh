@@ -2515,6 +2515,7 @@ EOF
     echo "error: could not parse tab/pane id from herdr tab create output" >&2
     return 1
   fi
+  fm_backend_herdr_tab_prune_plugin_panes "$session" "$wsid" "$tab_id" "$pane_id"
   [ -z "$seeded_tab_id" ] || fm_backend_herdr_workspace_prune_seeded_default_tab "$session" "$wsid" "$seeded_tab_id"
   if [ -n "$dup_tab_ids" ]; then
     while IFS= read -r dup; do
@@ -2563,7 +2564,7 @@ FM_BACKEND_HERDR_PROJECTION_CONVERGE_SLEEP=${FM_BACKEND_HERDR_PROJECTION_CONVERG
 # A missing, failed, or malformed create response stays ambiguous and grants no
 # cleanup authority.
 fm_backend_herdr_projection_create_task() {  # <cwd> <workspace-label> <task-label>
-  local cwd=$1 workspace_label=$2 task_label=$3 session out tabs panes tab_count pane_count focus_before active_tab attempt
+  local cwd=$1 workspace_label=$2 task_label=$3 session out tabs panes tab_count pane_count focus_before active_tab attempt confirmed
   FM_BACKEND_HERDR_PROJECTION_SESSION=""
   FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID=""
   FM_BACKEND_HERDR_PROJECTION_SEEDED_TAB_ID=""
@@ -2649,8 +2650,10 @@ fm_backend_herdr_projection_create_task() {  # <cwd> <workspace-label> <task-lab
 
   # A plugin creation hook can dock its own pane into the task tab
   # asynchronously, so Herdr-registered plugin panes are pruned and the exact
-  # shape re-read a bounded number of times before the shape is judged.
+  # shape re-read a bounded number of times before the shape is judged, and a
+  # passing shape must hold on one more read so a late dock is pruned too.
   attempt=0
+  confirmed=0
   while :; do
     fm_backend_herdr_tab_prune_plugin_panes "$session" \
       "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" \
@@ -2678,10 +2681,13 @@ fm_backend_herdr_projection_create_task() {  # <cwd> <workspace-label> <task-lab
        && printf '%s' "$panes" | jq -e --arg pane "$FM_BACKEND_HERDR_PROJECTION_PANE_ID" \
          --arg tab "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" \
          '.result.panes[0].pane_id == $pane and .result.panes[0].tab_id == $tab' >/dev/null 2>&1; then
-      return 0
+      [ "$confirmed" = 0 ] || return 0
+      confirmed=1
+    else
+      confirmed=0
+      attempt=$((attempt + 1))
+      [ "$attempt" -lt "$FM_BACKEND_HERDR_PROJECTION_CONVERGE_ATTEMPTS" ] || break
     fi
-    attempt=$((attempt + 1))
-    [ "$attempt" -lt "$FM_BACKEND_HERDR_PROJECTION_CONVERGE_ATTEMPTS" ] || break
     sleep "$FM_BACKEND_HERDR_PROJECTION_CONVERGE_SLEEP"
   done
   echo "error: disposable herdr presentation workspace did not converge to exactly one task pane" >&2

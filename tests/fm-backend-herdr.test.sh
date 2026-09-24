@@ -208,6 +208,8 @@ SH
 # herdr-sidebar 0.13.0 on Herdr 0.9.1) that docks a plugin pane into every new
 # tab, listed before the tab's own pane because it docks left;
 # FM_FAKE_HERDR_PLUGIN_DOCK=foreign docks a pane no plugin registered.
+# FM_FAKE_HERDR_PLUGIN_DOCK=late docks a new tab's plugin pane only once a
+# workspace listing has already shown that tab alone with its own pane.
 make_herdr_statefake() {  # <dir> -> echoes fakebin dir; seeds an empty state file
   local dir=$1 fb="$1/fakebin"
   mkdir -p "$fb"
@@ -273,8 +275,13 @@ case "$cmd $sub" in
     printf '{"result":{"workspace":{"workspace_id":"%s","label":"%s"},"tab":{"tab_id":"%s"},"root_pane":{"pane_id":"%s"}}}\n' \
       "$wsid" "$label" "$wsid:t$dn" "$wsid:p$dn"
     ;;
+  "session list")
+    printf '{"sessions":[{"name":"%s","running":true}]}\n' "${HERDR_SESSION:-}"
+    ;;
   "tab list")
-    jq_state --arg w "$ws" '{result:{tabs:[.tabs[]|select(.workspace_id==$w)]}}'
+    jq_state --arg w "$ws" '{result:{tabs:[.tabs[]|select($w == "" or .workspace_id==$w)]}}'
+    jq_state --arg w "$ws" 'if .late_dock != null and .late_dock.workspace_id == $w
+      and ([.tabs[]|select(.workspace_id==$w)]|length) == 1 then .late_dock.armed = true else . end' | save
     ;;
   "tab create")
     n=$(jq_state -r '.next'); tabid="$ws:t$n"; paneid="$ws:p$n"
@@ -282,12 +289,20 @@ case "$cmd $sub" in
       '.tabs += [{tab_id:$tabid, label:$wlabel, workspace_id:$w, pane_id:$paneid}]
        | .next = (.next + 1)' | save
     plugin_dock "$ws" "$tabid"
+    if [ "${FM_FAKE_HERDR_PLUGIN_DOCK:-}" = late ]; then
+      jq_state --arg w "$ws" --arg t "$tabid" '.late_dock = {workspace_id:$w, tab_id:$t}' | save
+    fi
     printf '{"result":{"tab":{"tab_id":"%s"},"root_pane":{"pane_id":"%s"}}}\n' "$tabid" "$paneid"
     ;;
   "pane list")
     jq_state --arg w "$ws" '{result:{panes:(
       [.extra_panes[]|select(.workspace_id==$w)|{pane_id, tab_id, workspace_id}]
       + [.tabs[]|select(.workspace_id==$w and .pane_id != null)|{pane_id:.pane_id, tab_id:.tab_id, workspace_id:.workspace_id}])}}'
+    if [ "$(jq_state -r --arg w "$ws" '.late_dock.armed == true and .late_dock.workspace_id == $w')" = true ]; then
+      n=$(jq_state -r '.next')
+      jq_state --arg p "$ws:p$n" '.extra_panes += [{pane_id:$p, tab_id:.late_dock.tab_id, workspace_id:.late_dock.workspace_id, plugin:true}]
+        | .next = (.next + 1) | del(.late_dock)' | save
+    fi
     ;;
   "pane get")
     pane=${3:-}
@@ -1327,6 +1342,8 @@ test_create_task_closes_and_replaces_dead_pane_husk() {
   # 4: tab create -> the replacement tab (created BEFORE the husk is closed)
   printf '{"result":{"tab":{"tab_id":"w1:t3"},"root_pane":{"pane_id":"w1:p3"}}}\n' > "$resp/4.out"
   printf '{"result":{"tabs":[{"tab_id":"w1:t3","label":"fm-husk1","workspace_id":"w1"}]}}\n' > "$resp/6.out"
+  # The replacement tab's create is followed by a plugin-pane prune listing.
+  herdr_response_insert_slot "$resp" 5 '{"result":{"panes":[{"pane_id":"w1:p2","tab_id":"w1:t2"},{"pane_id":"w1:p3","tab_id":"w1:t3"}]}}'
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_create_task fmtest:w1 fm-husk1 /tmp/proj' "$ROOT" ) \
@@ -1355,6 +1372,8 @@ test_create_task_closes_and_replaces_no_agent_husk() {
   # 5: tab create -> the replacement tab (created BEFORE the husk is closed)
   printf '{"result":{"tab":{"tab_id":"w1:t3"},"root_pane":{"pane_id":"w1:p3"}}}\n' > "$resp/5.out"
   printf '{"result":{"tabs":[{"tab_id":"w1:t3","label":"fm-husk2","workspace_id":"w1"}]}}\n' > "$resp/7.out"
+  # The replacement tab's create is followed by a plugin-pane prune listing.
+  herdr_response_insert_slot "$resp" 6 '{"result":{"panes":[{"pane_id":"w1:p2","tab_id":"w1:t2"},{"pane_id":"w1:p3","tab_id":"w1:t3"}]}}'
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_create_task fmtest:w1 fm-husk2 /tmp/proj' "$ROOT" ) \
@@ -1383,6 +1402,8 @@ test_create_task_closes_all_duplicate_husks_after_replacement() {
   printf '{"error":{"code":"agent_not_found","message":"agent target w1:p3 not found"}}\n' > "$resp/7.out"
   printf '{"result":{"tab":{"tab_id":"w1:t4"},"root_pane":{"pane_id":"w1:p4"}}}\n' > "$resp/8.out"
   printf '{"result":{"tabs":[{"tab_id":"w1:t4","label":"fm-husk-many","workspace_id":"w1"}]}}\n' > "$resp/11.out"
+  # The replacement tab's create is followed by a plugin-pane prune listing.
+  herdr_response_insert_slot "$resp" 9 '{"result":{"panes":[{"pane_id":"w1:p2","tab_id":"w1:t2"},{"pane_id":"w1:p3","tab_id":"w1:t3"},{"pane_id":"w1:p4","tab_id":"w1:t4"}]}}'
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_create_task fmtest:w1 fm-husk-many /tmp/proj' "$ROOT" ) \
@@ -1415,6 +1436,8 @@ test_create_task_refuses_when_preexisting_husk_tab_remains() {
   printf '{"result":{"tab":{"tab_id":"w1:t3"},"root_pane":{"pane_id":"w1:p3"}}}\n' > "$resp/5.out"
   printf '1\n' > "$resp/6.exit"
   printf '{"result":{"tabs":[{"tab_id":"w1:t2","label":"fm-stale-husk","workspace_id":"w1"},{"tab_id":"w1:t3","label":"fm-stale-husk","workspace_id":"w1"}]}}\n' > "$resp/7.out"
+  # The replacement tab's create is followed by a plugin-pane prune listing.
+  herdr_response_insert_slot "$resp" 6 '{"result":{"panes":[{"pane_id":"w1:p2","tab_id":"w1:t2"},{"pane_id":"w1:p3","tab_id":"w1:t3"}]}}'
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_create_task fmtest:w1 fm-stale-husk /tmp/proj' "$ROOT" 2>&1 )
@@ -1971,8 +1994,10 @@ test_projection_create_uses_exact_response_ids_and_leaves_one_task_pane() {
   # prune Herdr-registered plugin panes; neither list holds a candidate here.
   herdr_response_insert_slot "$resp" 7 '{"result":{"panes":[{"pane_id":"w9:p1","tab_id":"w9:t1"},{"pane_id":"w9:p2","tab_id":"w9:t2"}]}}'
   herdr_response_insert_slot "$resp" 11 '{"result":{"panes":[{"pane_id":"w9:p2","tab_id":"w9:t2"}]}}'
+  # The passing shape is confirmed by one more prune-and-read round.
+  cp "$resp/11.out" "$resp/14.out"; cp "$resp/12.out" "$resp/15.out"; cp "$resp/13.out" "$resp/16.out"
   fb=$(make_herdr_fakebin "$dir")
-  out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" HERDR_SESSION=fmtest \
+  out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" HERDR_SESSION=fmtest FM_BACKEND_HERDR_PROJECTION_CONVERGE_SLEEP=0 \
     bash -c '
       . "$0/bin/backends/herdr.sh"
       fm_backend_herdr_projection_focus_snapshot() { printf "captain-ws\tcaptain-tab"; }
@@ -5291,7 +5316,7 @@ herdr_dock_run() {  # <dir> <dock-kind> <bash -c body> [args...]
 
 # shellcheck disable=SC2016  # bash -c bodies expand in the child shell
 test_plugin_dock_flat_spawn_and_kill_leave_no_plugin_only_tab() {
-  local dir state log raw container seeded wsid ids tab pane live
+  local dir state log raw container seeded wsid ids tab pane live resolved respawn_tab respawn_pane
   dir="$TMP_ROOT/plugin-dock-flat"; mkdir -p "$dir"; state="$dir/state.json"; log="$dir/log"; : > "$log"
   make_herdr_statefake "$dir" >/dev/null
   raw=$(herdr_dock_run "$dir" 1 'fm_backend_herdr_container_ensure /proj') \
@@ -5304,18 +5329,27 @@ test_plugin_dock_flat_spawn_and_kill_leave_no_plugin_only_tab() {
     || fail "the seeded tab and its plugin pane should be pruned, leaving only the task tab: $(jq -c . "$state")"
   [ "$(jq -r --arg t "$tab" '[.tabs[]|select(.tab_id==$t)][0].pane_id' "$state")" = "$pane" ] \
     || fail "create_task must return the task tab's own pane, not the docked plugin pane: $pane"
-  [ "$(jq -r --arg t "$tab" '[.extra_panes[]|select(.tab_id==$t and .plugin)]|length' "$state")" = 1 ] \
-    || fail "the fixture should leave the plugin pane docked beside the flat task pane: $(jq -c . "$state")"
+  [ "$(jq -r --arg w "$wsid" '[.extra_panes[]|select(.workspace_id==$w)]|length' "$state")" = 0 ] \
+    || fail "the flat task tab should hold exactly the task pane after its plugin pane is pruned: $(jq -c . "$state")"
   assert_contains "$(cat "$log")" $'plugin\x1fpane\x1fclose' \
-    "the seeded tab's plugin pane was not closed through the plugin registration"
+    "the plugin panes were not closed through the plugin registration"
   live=$(herdr_dock_run "$dir" 1 'fm_backend_herdr_list_live fmtest')
-  assert_not_contains "$live" "fm-dock" \
-    "recovery discovery named a pane in a tab holding a plugin pane beside the task pane: $live"
-  herdr_dock_run "$dir" 1 'fm_backend_herdr_kill "fmtest:$1"' "$pane" || fail "kill failed with a docked plugin pane"
+  [ "$live" = "fmtest:$pane"$'\t'"fm-dock" ] \
+    || fail "recovery discovery should name the flat task pane: $live"
+  resolved=$(herdr_dock_run "$dir" 1 'fm_backend_herdr_resolve_bare_selector fm-dock') \
+    || fail "the bare selector did not resolve the flat task tab"
+  [ "$resolved" = "fmtest:$pane" ] || fail "the bare selector should resolve the task pane: $resolved"
+  ids=$(herdr_dock_run "$dir" 1 'fm_backend_herdr_create_task "$1" fm-dock /proj ""' "$container") \
+    || fail "respawn over a husk failed with a docking plugin"
+  respawn_tab=${ids%% *}; respawn_pane=${ids#* }
+  [ "$(jq -c --arg w "$wsid" '[.tabs[]|select(.workspace_id==$w)|{tab_id,pane_id}]' "$state")" = "[{\"tab_id\":\"$respawn_tab\",\"pane_id\":\"$respawn_pane\"}]" ] \
+    && [ "$(jq -r --arg w "$wsid" '[.extra_panes[]|select(.workspace_id==$w)]|length' "$state")" = 0 ] \
+    || fail "respawn should replace the husk with exactly one task pane: $(jq -c . "$state")"
+  herdr_dock_run "$dir" 1 'fm_backend_herdr_kill "fmtest:$1"' "$respawn_pane" || fail "kill failed after a docking respawn"
   [ "$(jq -r --arg w "$wsid" '[.tabs[]|select(.workspace_id==$w)]|length' "$state")" = 0 ] \
     && [ "$(jq -r '.extra_panes|length' "$state")" = 0 ] \
     || fail "killing the task left a plugin-only tab behind: $(jq -c . "$state")"
-  pass "herdr plugin dock: flat spawn prunes the seeded tab, returns the task pane, and kill leaves no plugin-only tab"
+  pass "herdr plugin dock: flat spawn and respawn keep exactly the task pane, recovery resolves it, and kill leaves no plugin-only tab"
 }
 
 # shellcheck disable=SC2016  # bash -c bodies expand in the child shell
@@ -5357,6 +5391,25 @@ test_projection_create_converges_past_a_docked_plugin_pane() {
     || fail "only the exact seeded pane may take an explicit close; plugin panes close through their registration: $(tr '\037' ' ' < "$log")"
   assert_not_contains "$(cat "$log")" $'workspace\x1fclose' "projection introduced workspace-close authority"
   pass "herdr plugin dock: a projected workspace converges to exactly one task pane past docked plugin panes"
+}
+
+# shellcheck disable=SC2016  # bash -c bodies expand in the child shell
+test_projection_create_prunes_a_plugin_pane_docked_after_the_first_pass() {
+  local dir state log out ws tab pane
+  dir="$TMP_ROOT/plugin-dock-projection-late"; mkdir -p "$dir"; state="$dir/state.json"; log="$dir/log"; : > "$log"
+  make_herdr_statefake "$dir" >/dev/null
+  out=$(herdr_dock_run "$dir" late '
+    fm_backend_herdr_projection_focus_snapshot() { printf "captain-ws\tcaptain-tab"; }
+    fm_backend_herdr_projection_focus_restore() { return 0; }
+    fm_backend_herdr_projection_create_task /proj "└ dock · p:tok" fm-dock || exit 1
+    printf "%s %s %s" "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" "$FM_BACKEND_HERDR_PROJECTION_PANE_ID"
+  ' 2>&1) || fail "projection with a late-docking plugin should converge: $out"
+  read -r ws tab pane <<< "$out"
+  [ "$(jq -c --arg w "$ws" '[.tabs[]|select(.workspace_id==$w)|{tab_id,pane_id}]' "$state")" = "[{\"tab_id\":\"$tab\",\"pane_id\":\"$pane\"}]" ] \
+    && [ "$(jq -r --arg w "$ws" '[.extra_panes[]|select(.workspace_id==$w)]|length' "$state")" = 0 ] \
+    || fail "a plugin pane docked after the first passing read survived the projection: $(jq -c . "$state")"
+  assert_contains "$(cat "$log")" $'plugin\x1fpane\x1fclose' "the late plugin pane was not closed through its registration"
+  pass "herdr plugin dock: a plugin pane docked after the first passing read is pruned before projection success"
 }
 
 # shellcheck disable=SC2016  # bash -c bodies expand in the child shell
@@ -5849,6 +5902,7 @@ test_container_ensure_uses_secondmate_home_label
 test_workspace_ensure_prunes_default_tab
 test_repeated_cycles_reuse_one_workspace_no_orphans
 test_plugin_dock_flat_spawn_and_kill_leave_no_plugin_only_tab
+test_projection_create_prunes_a_plugin_pane_docked_after_the_first_pass
 test_plugin_prune_never_closes_an_unregistered_split
 test_projection_create_converges_past_a_docked_plugin_pane
 test_projection_create_refuses_an_unregistered_docked_pane
