@@ -188,6 +188,16 @@ Operational compromises:
 `tests/fm-backend-herdr-stale-active-tab-e2e.test.sh` proves a persisted-focused tab still closes when no foreground client is attached.
 `tests/fm-herdr-attached-viewer-live-e2e.test.sh` proves the other half against a real attached viewer, which `bin/fm-herdr-lab.sh viewer start` supplies over a pty sized before the fork; [`verification/runtime-backends.md`](verification/runtime-backends.md#attached-foreground-viewer) owns the active versioned evidence and the re-run trigger.
 
+## Plugin panes in task tabs
+
+A Herdr plugin can add its own pane to every new tab from a `workspace.created` or `tab.created` hook; the `herdr-sidebar` plugin on Herdr 0.9.1 splits a left-docked Explorer pane into each new workspace's seeded tab and each new task tab.
+Such a pane is never the task's endpoint, so Firstmate never adopts, sends to, or captures it.
+Firstmate removes it only through `herdr plugin pane close`, which checks Herdr's own plugin-pane registration in the same request and refuses any pane no plugin opened; labels, titles, and pane tokens are never identity.
+The seeded-tab prune, the projected-workspace convergence, the focus-preserving projection close, and the task kill each prune registered plugin panes from their one exact tab before judging its shape or closing the task pane, so a projection still converges to exactly one task pane and no task leaves a plugin-only tab or workspace behind.
+A pane beside the task pane that Herdr does not register to a plugin, such as a captain's split, is never closed: a projection with one stays unconverged and quarantined, and a flat task close leaves that tab in place.
+A tab holding more than one pane never resolves to a single endpoint by position, because a left-docked pane lists first; restart husk replacement and label-based recovery discovery therefore treat such a tab as ambiguous.
+`bin/backends/herdr.sh` owns the mechanics in `fm_backend_herdr_tab_prune_plugin_panes`, and `tests/fm-backend-herdr.test.sh` pins the docked-plugin and unregistered-split shapes against its stateful fake.
+
 ## Default-tab prune safety
 
 `herdr workspace create` seeds one default tab.
@@ -360,6 +370,8 @@ Tests use thin compatibility wrappers in `tests/herdr-test-safety.sh` and never 
 - Ghost and placeholder recognition uses ANSI de-emphasis when available; an unstyled glyph row carrying trailing non-idle text fails safely to `unknown`.
 - Mid-session secondmate agent-process liveness is not implemented.
 - Only tmux and Herdr can host the away-mode supervisor terminal.
+- A plugin hook that focuses the pane it docks beside moves the captain's view to the new task tab after Firstmate's own focus checks finish; `herdr-sidebar` 0.13.0 does this even for `--no-focus` creates, and Firstmate cannot prevent that asynchronous focus change.
+- A restored task tab that holds a plugin pane beside its husk is ambiguous, so respawning into it refuses until the tab is closed by hand.
 
 ## Regression entry points
 

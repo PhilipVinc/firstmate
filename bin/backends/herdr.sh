@@ -1033,7 +1033,14 @@ fm_backend_herdr_projection_close_pane_focus_preserving() {  # <session> <pane-i
     FM_BACKEND_HERDR_PROJECTION_CLOSE_AGENT_STATE=$state
     [ "$state" = "$required_agent_state" ] || return 1
   fi
-  [ "$target_tab" != "$active_tab" ] || skip_restore=1
+  # Plugin panes docked beside the target would keep its tab and workspace
+  # alive after the close, and would hide an emptying close from the plan.
+  # The active tab is pruned only after the mutation guard below allows it.
+  if [ "$target_tab" != "$active_tab" ]; then
+    fm_backend_herdr_tab_prune_plugin_panes "$session" "$target_ws" "$target_tab" "$pane_id"
+  else
+    skip_restore=1
+  fi
   plan=plain
   plan_shell_pid=
   plan_move_record=
@@ -1086,6 +1093,8 @@ fm_backend_herdr_projection_close_pane_focus_preserving() {  # <session> <pane-i
       before=$FM_BACKEND_HERDR_PROJECTION_MUTATION_FOCUS
       skip_restore=0
     fi
+    [ "$target_tab" != "$active_tab" ] \
+      || fm_backend_herdr_tab_prune_plugin_panes "$session" "$target_ws" "$target_tab" "$pane_id"
     if fm_backend_herdr_explicit_close_pane_confirmed "$session" "$pane_id"; then
       close_status=0
     else
@@ -1875,6 +1884,10 @@ fm_backend_herdr_launcher_identity() {  # <session>
 # workspace - callers only invoke it once at least one other (real task) tab
 # exists alongside it, never right after workspace creation - and this
 # function independently re-checks the tab count as a second layer.
+# A plugin pane a creation hook docked into the seeded tab is removed first
+# (fm_backend_herdr_tab_prune_plugin_panes), so the seeded shell is the tab's
+# only pane and closing it removes the tab; any other extra pane leaves the
+# tab ambiguous and it stays.
 fm_backend_herdr_workspace_prune_seeded_default_tab() {  # <session> <workspace_id> <seeded_tab_id> [focus-preserving]
   local session=$1 wsid=$2 tab_id=$3 close_mode=${4:-direct} tabs tab_count current_label pane_id agent_out agent_status
   [ -n "$tab_id" ] || return 0
@@ -1884,6 +1897,10 @@ fm_backend_herdr_workspace_prune_seeded_default_tab() {  # <session> <workspace_
   current_label=$(printf '%s' "$tabs" | jq -r --arg t "$tab_id" '.result.tabs[]? | select(.tab_id == $t) | .label' 2>/dev/null)
   [ "$current_label" = "1" ] || return 0
   pane_id=$(fm_backend_herdr_pane_for_tab "$session" "$wsid" "$tab_id") || return 0
+  if [ -z "$pane_id" ]; then
+    fm_backend_herdr_tab_prune_plugin_panes "$session" "$wsid" "$tab_id"
+    pane_id=$(fm_backend_herdr_pane_for_tab "$session" "$wsid" "$tab_id") || return 0
+  fi
   [ -n "$pane_id" ] || return 0
   agent_out=$(fm_backend_herdr_cli "$session" agent get "$pane_id" 2>/dev/null)
   agent_status=$(printf '%s' "$agent_out" | jq -r '.result.agent.agent_status // empty' 2>/dev/null)
@@ -2063,6 +2080,33 @@ fm_backend_herdr_workspace_presence_state() {  # <session> <workspace_id>
     1) printf 'present' ;;
     *) printf 'unknown' ;;
   esac
+}
+
+# fm_backend_herdr_tab_prune_plugin_panes: close every Herdr-registered plugin
+# pane inside one exact tab except <keep-pane>, leaving every other pane alone.
+# A plugin can attach its own pane to each new tab from a workspace.created or
+# tab.created hook (verified: herdr-sidebar 0.13.0 on Herdr 0.9.1 splits an
+# Explorer pane into every new tab, docked left). Such a pane is never the
+# task's, breaks the one-task-pane shape, and would outlive the task pane as an
+# Explorer-only tab or workspace.
+# Identity comes from Herdr, never from a label or token: `plugin pane close`
+# checks the server's plugin-pane registration in the same request and refuses
+# with plugin_pane_not_found for any pane no plugin opened, so a shell, an
+# agent, or a captain's split can never be closed here.
+# Best-effort and silent: an unreadable list attempts nothing, and every caller
+# keeps its own exact shape check afterward.
+fm_backend_herdr_tab_prune_plugin_panes() {  # <session> <workspace-id> <tab-id> [keep-pane-id]
+  local session=$1 wsid=$2 tab_id=$3 keep=${4:-} panes candidate
+  [ -n "$wsid" ] && [ -n "$tab_id" ] || return 0
+  panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 0
+  while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    fm_backend_herdr_cli "$session" plugin pane close "$candidate" >/dev/null 2>&1 || true
+  done < <(printf '%s' "$panes" | jq -r --arg tab "$tab_id" --arg keep "$keep" '
+    select((.result.panes | type) == "array")
+    | .result.panes[] | select(.tab_id == $tab and .pane_id != $keep) | .pane_id
+  ' 2>/dev/null)
+  return 0
 }
 
 # fm_backend_herdr_explicit_close_pane_confirmed: issue one explicit close and
@@ -2498,6 +2542,11 @@ EOF
   printf '%s %s' "$tab_id" "$pane_id"
 }
 
+# Bounded re-reads of the projected shape while a plugin creation hook may
+# still be docking its pane; overridable for tests.
+FM_BACKEND_HERDR_PROJECTION_CONVERGE_ATTEMPTS=${FM_BACKEND_HERDR_PROJECTION_CONVERGE_ATTEMPTS:-3}
+FM_BACKEND_HERDR_PROJECTION_CONVERGE_SLEEP=${FM_BACKEND_HERDR_PROJECTION_CONVERGE_SLEEP:-0.3}
+
 # fm_backend_herdr_projection_create_task: create one disposable presentation
 # workspace and its normal fm-<id> task tab without looking up, adopting, or
 # reusing any existing workspace.
@@ -2514,7 +2563,7 @@ EOF
 # A missing, failed, or malformed create response stays ambiguous and grants no
 # cleanup authority.
 fm_backend_herdr_projection_create_task() {  # <cwd> <workspace-label> <task-label>
-  local cwd=$1 workspace_label=$2 task_label=$3 session out tabs panes tab_count pane_count focus_before active_tab
+  local cwd=$1 workspace_label=$2 task_label=$3 session out tabs panes tab_count pane_count focus_before active_tab attempt
   FM_BACKEND_HERDR_PROJECTION_SESSION=""
   FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID=""
   FM_BACKEND_HERDR_PROJECTION_SEEDED_TAB_ID=""
@@ -2598,32 +2647,45 @@ fm_backend_herdr_projection_create_task() {  # <cwd> <workspace-label> <task-lab
     }
   fi
 
-  tabs=$(fm_backend_herdr_cli "$session" tab list --workspace "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" 2>/dev/null) || {
-    echo "error: could not verify the disposable herdr presentation workspace shape" >&2
-    return 1
-  }
-  panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" 2>/dev/null) || {
-    echo "error: could not verify the disposable herdr presentation pane shape" >&2
-    return 1
-  }
-  if ! printf '%s' "$tabs" | jq -e '(.result.tabs | type) == "array"' >/dev/null 2>&1 \
-     || ! printf '%s' "$panes" | jq -e '(.result.panes | type) == "array"' >/dev/null 2>&1; then
-    echo "error: could not parse the disposable herdr presentation workspace shape" >&2
-    return 1
-  fi
-  tab_count=$(printf '%s' "$tabs" | jq -r '.result.tabs | length' 2>/dev/null)
-  pane_count=$(printf '%s' "$panes" | jq -r '.result.panes | length' 2>/dev/null)
-  if [ "$tab_count" != 1 ] || [ "$pane_count" != 1 ] \
-     || ! printf '%s' "$tabs" | jq -e --arg task "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" \
-       --arg seeded "$FM_BACKEND_HERDR_PROJECTION_SEEDED_TAB_ID" \
-       '.result.tabs[0].tab_id == $task and ([.result.tabs[] | select(.tab_id == $seeded)] | length) == 0' >/dev/null 2>&1 \
-     || ! printf '%s' "$panes" | jq -e --arg pane "$FM_BACKEND_HERDR_PROJECTION_PANE_ID" \
-       --arg tab "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" \
-       '.result.panes[0].pane_id == $pane and .result.panes[0].tab_id == $tab' >/dev/null 2>&1; then
-    echo "error: disposable herdr presentation workspace did not converge to exactly one task pane" >&2
-    return 1
-  fi
-  return 0
+  # A plugin creation hook can dock its own pane into the task tab
+  # asynchronously, so Herdr-registered plugin panes are pruned and the exact
+  # shape re-read a bounded number of times before the shape is judged.
+  attempt=0
+  while :; do
+    fm_backend_herdr_tab_prune_plugin_panes "$session" \
+      "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" \
+      "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" \
+      "$FM_BACKEND_HERDR_PROJECTION_PANE_ID"
+    tabs=$(fm_backend_herdr_cli "$session" tab list --workspace "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" 2>/dev/null) || {
+      echo "error: could not verify the disposable herdr presentation workspace shape" >&2
+      return 1
+    }
+    panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$FM_BACKEND_HERDR_PROJECTION_WORKSPACE_ID" 2>/dev/null) || {
+      echo "error: could not verify the disposable herdr presentation pane shape" >&2
+      return 1
+    }
+    if ! printf '%s' "$tabs" | jq -e '(.result.tabs | type) == "array"' >/dev/null 2>&1 \
+       || ! printf '%s' "$panes" | jq -e '(.result.panes | type) == "array"' >/dev/null 2>&1; then
+      echo "error: could not parse the disposable herdr presentation workspace shape" >&2
+      return 1
+    fi
+    tab_count=$(printf '%s' "$tabs" | jq -r '.result.tabs | length' 2>/dev/null)
+    pane_count=$(printf '%s' "$panes" | jq -r '.result.panes | length' 2>/dev/null)
+    if [ "$tab_count" = 1 ] && [ "$pane_count" = 1 ] \
+       && printf '%s' "$tabs" | jq -e --arg task "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" \
+         --arg seeded "$FM_BACKEND_HERDR_PROJECTION_SEEDED_TAB_ID" \
+         '.result.tabs[0].tab_id == $task and ([.result.tabs[] | select(.tab_id == $seeded)] | length) == 0' >/dev/null 2>&1 \
+       && printf '%s' "$panes" | jq -e --arg pane "$FM_BACKEND_HERDR_PROJECTION_PANE_ID" \
+         --arg tab "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" \
+         '.result.panes[0].pane_id == $pane and .result.panes[0].tab_id == $tab' >/dev/null 2>&1; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt "$FM_BACKEND_HERDR_PROJECTION_CONVERGE_ATTEMPTS" ] || break
+    sleep "$FM_BACKEND_HERDR_PROJECTION_CONVERGE_SLEEP"
+  done
+  echo "error: disposable herdr presentation workspace did not converge to exactly one task pane" >&2
+  return 1
 }
 
 # fm_backend_herdr_projection_cleanup_exact: same-process abort cleanup for a
@@ -3435,12 +3497,17 @@ fm_backend_herdr_kill_serialized() {  # <session> <pane>
   local session=$1 pane=$2
   local before active_tab info target_pane target_tab target_ws plan shell_pid plan_move_record close_failed workspace_presence
   before=$(fm_backend_herdr_projection_focus_snapshot "$session") || before=
+  info=$(fm_backend_herdr_cli "$session" pane get "$pane" 2>/dev/null) || info=
+  target_pane=$(printf '%s' "$info" | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
+  target_tab=$(printf '%s' "$info" | jq -r '.result.pane.tab_id // empty' 2>/dev/null)
+  target_ws=$(printf '%s' "$info" | jq -r '.result.pane.workspace_id // empty' 2>/dev/null)
+  # A plugin pane docked beside the task pane would otherwise outlive it as a
+  # plugin-only tab or workspace (fm_backend_herdr_tab_prune_plugin_panes).
+  if [ "$target_pane" = "$pane" ] && [ -n "$target_tab" ]; then
+    fm_backend_herdr_tab_prune_plugin_panes "$session" "$target_ws" "$target_tab" "$pane"
+  fi
   if [ -n "$before" ]; then
     active_tab=${before#*$'\t'}
-    info=$(fm_backend_herdr_cli "$session" pane get "$pane" 2>/dev/null) || info=
-    target_pane=$(printf '%s' "$info" | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
-    target_tab=$(printf '%s' "$info" | jq -r '.result.pane.tab_id // empty' 2>/dev/null)
-    target_ws=$(printf '%s' "$info" | jq -r '.result.pane.workspace_id // empty' 2>/dev/null)
     if [ "$target_pane" = "$pane" ] && [ -n "$target_tab" ] && [ "$target_tab" != "$active_tab" ]; then
       plan=$(fm_backend_herdr_emptying_close_plan "$session" "$pane" "$target_ws" "$target_tab" "${before%%$'\t'*}")
       plan_move_record=
@@ -3649,14 +3716,18 @@ fm_backend_herdr_wait_for_working() {  # <session> <pane_id> <budget-seconds> <p
   fi
 }
 
-# fm_backend_herdr_pane_for_tab: the root pane id for <tab_id> in <workspace_id>
+# fm_backend_herdr_pane_for_tab: the one pane id for <tab_id> in <workspace_id>
 # of <session>, via one pane list call filtered by tab_id (never assumes a
 # tab-number/pane-number correspondence - herdr numbers them independently).
+# Empty unless the tab holds exactly one pane: pane list follows layout order,
+# so a left-docked plugin pane (fm_backend_herdr_tab_prune_plugin_panes) or a
+# captain's split can list first, and guessing the first entry would name a
+# pane that is not the task's.
 fm_backend_herdr_pane_for_tab() {  # <session> <workspace_id> <tab_id>
   local session=$1 wsid=$2 tab_id=$3 panes
   panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
   printf '%s' "$panes" | jq -r --arg tab "$tab_id" \
-    '.result.panes[]? | select(.tab_id == $tab) | .pane_id' 2>/dev/null | head -1
+    '[.result.panes[]? | select(.tab_id == $tab) | .pane_id] | if length == 1 then .[0] else empty end' 2>/dev/null
 }
 
 # fm_backend_herdr_resolve_bare_selector: the live-tab-listing fallback for an
