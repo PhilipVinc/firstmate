@@ -200,7 +200,8 @@ SH
 # call - mirrors an out-of-band agent registering itself) or an
 # agent_not_found error when none was preset (verified real-herdr behavior for
 # a pane with no registered agent). Every call is logged to $FM_HERDR_LOG in
-# the same unit-separated form as make_herdr_fakebin.
+# the same unit-separated form as make_herdr_fakebin. `tab get <tab>` reports
+# the tab's tab_id/workspace_id/label or a tab_not_found error.
 # Extra panes beside a tab's root pane live in .extra_panes; `plugin pane
 # close` removes only an extra pane marked plugin and otherwise answers
 # plugin_pane_not_found, and a tab disappears once its root and extras are all
@@ -292,6 +293,12 @@ case "$cmd $sub" in
         '.late_dock = {workspace_id:$w, tab_id:$t, lists:$n}' | save
     fi
     printf '{"result":{"tab":{"tab_id":"%s"},"root_pane":{"pane_id":"%s"}}}\n' "$tabid" "$paneid"
+    ;;
+  "tab get")
+    tab=${3:-}
+    jq_state -c --arg t "$tab" '
+      [.tabs[]|select(.tab_id == $t)|{tab_id, workspace_id, label}] as $m
+      | if ($m|length) == 1 then {result:{tab:$m[0]}} else {error:{code:"tab_not_found"}} end'
     ;;
   "pane list")
     jq_state --arg w "$ws" '{result:{panes:(
