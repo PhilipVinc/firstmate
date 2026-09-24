@@ -2869,6 +2869,7 @@ fm_backend_herdr_projection_reclaim_task() {  # <session> <journal> <task-id> <h
     return 2
   fi
   fm_backend_herdr_projection_focus_restore "$session" "$focus_before" "husk replacement create" || return 1
+  fm_backend_herdr_tab_settle_plugin_panes "$session" "$meta_workspace" "$new_tab" "$new_pane" || true
   info=$(fm_backend_herdr_cli "$session" tab get "$new_tab" 2>/dev/null) || info=
   if ! printf '%s' "$info" | jq -e --arg tab "$new_tab" --arg workspace "$meta_workspace" '
     .result.tab.tab_id == $tab and .result.tab.workspace_id == $workspace

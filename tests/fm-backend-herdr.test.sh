@@ -3609,7 +3609,7 @@ test_projection_reclaim_refusal_matrix_is_non_mutating() {
 }
 
 test_projection_reclaim_replaces_only_exact_husk_and_advances_binding() {
-  local dir state home home_real log resp fb journal token label out calls create_line close_line agent_line boundary_mutations
+  local dir state home home_real log resp fb journal token label out calls create_line close_line agent_line boundary_mutations slot
   dir="$TMP_ROOT/projection-reclaim-exact"; state="$dir/state"; home="$dir/home"
   mkdir -p "$dir/responses" "$state" "$home"
   home_real=$(cd "$home" && pwd -P)
@@ -3656,6 +3656,11 @@ test_projection_reclaim_replaces_only_exact_husk_and_advances_binding() {
   printf '%s\n' '{"result":{"tabs":[{"tab_id":"w2:t3","label":"fm-fm-hibit-r1"}]}}' > "$resp/27.out"
   printf '%s\n' '{"result":{"panes":[{"pane_id":"w2:p3","tab_id":"w2:t3"}]}}' > "$resp/28.out"
   herdr_response_insert_slot "$resp" 20
+  # The replacement tab's plugin-pane settle reads the projected workspace
+  # twice through prune-and-read before the tab is verified.
+  for slot in 11 12 13 14; do
+    herdr_response_insert_slot "$resp" "$slot" '{"result":{"panes":[{"pane_id":"w2:p2","tab_id":"w2:t2"},{"pane_id":"w2:p3","tab_id":"w2:t3"}]}}'
+  done
   fb=$(make_herdr_fakebin "$dir")
   out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '
@@ -5482,6 +5487,46 @@ test_projection_create_prunes_a_plugin_pane_docked_after_the_first_pass() {
 }
 
 # shellcheck disable=SC2016  # bash -c bodies expand in the child shell
+test_projection_reclaim_converges_past_a_docked_plugin_pane() {
+  local dir state log home home_real token label journal out
+  dir="$TMP_ROOT/plugin-dock-projection-reclaim"; mkdir -p "$dir/state" "$dir/home"
+  state="$dir/state.json"; log="$dir/log"; home="$dir/home"; : > "$log"
+  home_real=$(cd "$home" && pwd -P)
+  make_herdr_statefake "$dir" >/dev/null
+  token=$(bash -c '
+    . "$0/bin/backends/herdr.sh"
+    token=$(fm_backend_herdr_projection_journal_create "$1" dock-r1) || exit 1
+    label=$(fm_backend_herdr_projection_workspace_label dock-r1 "$token")
+    fm_backend_herdr_projection_journal_bind \
+      "$1/dock-r1.herdr-presentation" dock-r1 "$2" fmtest \
+      w2 w2:t2 w2:p2 w1 firstmate "$label" fm-dock-r1 || exit 1
+    printf "%s" "$token"
+  ' "$ROOT" "$dir/state" "$home_real") || fail "could not create reclaim journal fixture"
+  journal="$dir/state/dock-r1.herdr-presentation"
+  label="└ dock-r1 · p:$token"
+  jq --arg wlabel "$label" '
+    .next = 10
+    | .workspaces = [{workspace_id:"w1", label:"firstmate"}, {workspace_id:"w2", label:$wlabel}]
+    | .tabs = [{tab_id:"w1:t1", label:"1", workspace_id:"w1", pane_id:"w1:p1"},
+               {tab_id:"w2:t2", label:"fm-dock-r1", workspace_id:"w2", pane_id:"w2:p2"}]
+  ' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+  out=$(herdr_dock_run "$dir" 1 '
+    fm_backend_herdr_projection_focus_snapshot() { printf "w1\tw1:t1"; }
+    fm_backend_herdr_projection_focus_restore() { return 0; }
+    fm_backend_herdr_projection_reclaim_task \
+      fmtest "$1" dock-r1 "$2" w2 w2:t2 w2:p2 firstmate fm-dock-r1 /proj || exit 1
+    printf "%s %s" "$FM_BACKEND_HERDR_PROJECTION_TAB_ID" "$FM_BACKEND_HERDR_PROJECTION_PANE_ID"
+  ' "$journal" "$home" 2>&1) || fail "reclaim with a docking plugin should converge: $out"
+  [ "$(jq -c '[.tabs[]|select(.workspace_id=="w2")|{tab_id,pane_id}]' "$state")" = "[{\"tab_id\":\"${out% *}\",\"pane_id\":\"${out#* }\"}]" ] \
+    && [ "$(jq -r '[.extra_panes[]|select(.workspace_id=="w2")]|length' "$state")" = 0 ] \
+    || fail "reclaim did not converge to exactly the replacement task pane: $out $(jq -c . "$state")"
+  [ "$(sed -n 's/^pane_id=//p' "$journal")" = "${out#* }" ] \
+    || fail "reclaim did not advance the journal to the replacement pane"
+  assert_contains "$(cat "$log")" $'plugin\x1fpane\x1fclose' "the docked plugin pane was not closed through its registration"
+  pass "herdr plugin dock: a projected restart reclaim converges past a docked plugin pane"
+}
+
+# shellcheck disable=SC2016  # bash -c bodies expand in the child shell
 test_projection_create_refuses_an_unregistered_docked_pane() {
   local dir state log out status foreign
   dir="$TMP_ROOT/plugin-dock-projection-foreign"; mkdir -p "$dir"; state="$dir/state.json"; log="$dir/log"; : > "$log"
@@ -5976,6 +6021,7 @@ test_plugin_dock_late_on_flat_create_is_pruned
 test_plugin_redock_after_activation_keeps_flat_task_resolvable
 test_plugin_prune_never_closes_an_unregistered_split
 test_projection_create_converges_past_a_docked_plugin_pane
+test_projection_reclaim_converges_past_a_docked_plugin_pane
 test_projection_create_refuses_an_unregistered_docked_pane
 test_adopted_workspace_never_prunes_default_tab
 test_label_collision_startup_workspace_leaves_live_tab_alone
