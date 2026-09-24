@@ -1885,7 +1885,7 @@ fm_backend_herdr_launcher_identity() {  # <session>
 # exists alongside it, never right after workspace creation - and this
 # function independently re-checks the tab count as a second layer.
 # A plugin pane a creation hook docked into the seeded tab is removed first
-# (fm_backend_herdr_tab_prune_plugin_panes), so the seeded shell is the tab's
+# (fm_backend_herdr_pane_for_tab), so the seeded shell is the tab's
 # only pane and closing it removes the tab; any other extra pane leaves the
 # tab ambiguous and it stays.
 fm_backend_herdr_workspace_prune_seeded_default_tab() {  # <session> <workspace_id> <seeded_tab_id> [focus-preserving]
@@ -1897,10 +1897,6 @@ fm_backend_herdr_workspace_prune_seeded_default_tab() {  # <session> <workspace_
   current_label=$(printf '%s' "$tabs" | jq -r --arg t "$tab_id" '.result.tabs[]? | select(.tab_id == $t) | .label' 2>/dev/null)
   [ "$current_label" = "1" ] || return 0
   pane_id=$(fm_backend_herdr_pane_for_tab "$session" "$wsid" "$tab_id") || return 0
-  if [ -z "$pane_id" ]; then
-    fm_backend_herdr_tab_prune_plugin_panes "$session" "$wsid" "$tab_id"
-    pane_id=$(fm_backend_herdr_pane_for_tab "$session" "$wsid" "$tab_id") || return 0
-  fi
   [ -n "$pane_id" ] || return 0
   agent_out=$(fm_backend_herdr_cli "$session" agent get "$pane_id" 2>/dev/null)
   agent_status=$(printf '%s' "$agent_out" | jq -r '.result.agent.agent_status // empty' 2>/dev/null)
@@ -3736,11 +3732,20 @@ fm_backend_herdr_wait_for_working() {  # <session> <pane_id> <budget-seconds> <p
 # of <session>, via one pane list call filtered by tab_id (never assumes a
 # tab-number/pane-number correspondence - herdr numbers them independently).
 # Empty unless the tab holds exactly one pane: pane list follows layout order,
-# so a left-docked plugin pane (fm_backend_herdr_tab_prune_plugin_panes) or a
-# captain's split can list first, and guessing the first entry would name a
-# pane that is not the task's.
+# so a left-docked plugin pane or a captain's split can list first, and
+# guessing the first entry would name a pane that is not the task's. A plugin
+# can dock its pane again whenever the tab becomes active (verified:
+# herdr-sidebar 0.13.0 on Herdr 0.9.1), long after create, so a multi-pane tab
+# first has its Herdr-registered plugin panes pruned
+# (fm_backend_herdr_tab_prune_plugin_panes) and is read once more; any other
+# extra pane keeps it ambiguous.
 fm_backend_herdr_pane_for_tab() {  # <session> <workspace_id> <tab_id>
-  local session=$1 wsid=$2 tab_id=$3 panes
+  local session=$1 wsid=$2 tab_id=$3 panes pane_id
+  panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
+  pane_id=$(printf '%s' "$panes" | jq -r --arg tab "$tab_id" \
+    '[.result.panes[]? | select(.tab_id == $tab) | .pane_id] | if length > 1 then "+" elif length == 1 then .[0] else empty end' 2>/dev/null)
+  [ "$pane_id" = "+" ] || { printf '%s' "$pane_id"; return 0; }
+  fm_backend_herdr_tab_prune_plugin_panes "$session" "$wsid" "$tab_id"
   panes=$(fm_backend_herdr_cli "$session" pane list --workspace "$wsid" 2>/dev/null) || return 1
   printf '%s' "$panes" | jq -r --arg tab "$tab_id" \
     '[.result.panes[]? | select(.tab_id == $tab) | .pane_id] | if length == 1 then .[0] else empty end' 2>/dev/null
@@ -3782,7 +3787,8 @@ EOF
 # "ID stability"). A caller running as a given home (e.g. a secondmate
 # recovering its own in-flight work) naturally scopes to that home's own
 # workspace because FM_HOME already names it - no glue needed, unlike the
-# primary-spawns-a-secondmate path in fm-spawn.sh. Read-only: a session/
+# primary-spawns-a-secondmate path in fm-spawn.sh. Read-only apart from the
+# plugin-pane prune in fm_backend_herdr_pane_for_tab: a session/
 # workspace that does not exist yet simply lists nothing. One
 # "<session>:<pane_id>\t<label>" line per live task tab.
 fm_backend_herdr_list_live() {  # <session>

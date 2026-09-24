@@ -5389,6 +5389,34 @@ test_plugin_dock_late_on_flat_create_is_pruned() {
 }
 
 # shellcheck disable=SC2016  # bash -c bodies expand in the child shell
+test_plugin_redock_after_activation_keeps_flat_task_resolvable() {
+  local dir state raw container seeded wsid ids tab pane live resolved respawn_tab respawn_pane
+  dir="$TMP_ROOT/plugin-dock-redock"; mkdir -p "$dir"; state="$dir/state.json"; : > "$dir/log"
+  make_herdr_statefake "$dir" >/dev/null
+  raw=$(herdr_dock_run "$dir" '' 'fm_backend_herdr_container_ensure /proj') || fail "container_ensure failed"
+  container=${raw%%$'\t'*}; seeded=${raw#*$'\t'}; wsid=${container#*:}
+  ids=$(herdr_dock_run "$dir" '' 'fm_backend_herdr_create_task "$1" fm-redock /proj "$2"' "$container" "$seeded") \
+    || fail "create_task failed"
+  tab=${ids%% *}; pane=${ids#* }
+  # The plugin docks again when the tab becomes active, after create settled.
+  fake_herdr_add_pane "$state" "$wsid" "$tab" "$wsid:p97" true
+  live=$(herdr_dock_run "$dir" '' 'fm_backend_herdr_list_live fmtest')
+  [ "$live" = "fmtest:$pane"$'\t'"fm-redock" ] || fail "recovery discovery should name the task pane past a re-docked plugin pane: $live"
+  fake_herdr_add_pane "$state" "$wsid" "$tab" "$wsid:p98" true
+  resolved=$(herdr_dock_run "$dir" '' 'fm_backend_herdr_resolve_bare_selector fm-redock') \
+    || fail "the bare selector did not resolve past a re-docked plugin pane"
+  [ "$resolved" = "fmtest:$pane" ] || fail "the bare selector should resolve the task pane: $resolved"
+  fake_herdr_add_pane "$state" "$wsid" "$tab" "$wsid:p99" true
+  ids=$(herdr_dock_run "$dir" '' 'fm_backend_herdr_create_task "$1" fm-redock /proj ""' "$container") \
+    || fail "respawn over a husk failed after the plugin re-docked"
+  respawn_tab=${ids%% *}; respawn_pane=${ids#* }
+  [ "$(jq -c --arg w "$wsid" '[.tabs[]|select(.workspace_id==$w)|{tab_id,pane_id}]' "$state")" = "[{\"tab_id\":\"$respawn_tab\",\"pane_id\":\"$respawn_pane\"}]" ] \
+    && [ "$(jq -r --arg w "$wsid" '[.extra_panes[]|select(.workspace_id==$w)]|length' "$state")" = 0 ] \
+    || fail "respawn should replace the re-docked husk with exactly one task pane: $(jq -c . "$state")"
+  pass "herdr plugin dock: a plugin pane re-docked after activation never hides a flat task from discovery or respawn"
+}
+
+# shellcheck disable=SC2016  # bash -c bodies expand in the child shell
 test_plugin_prune_never_closes_an_unregistered_split() {
   local dir state log raw container seeded wsid ids tab pane
   dir="$TMP_ROOT/plugin-dock-foreign"; mkdir -p "$dir"; state="$dir/state.json"; log="$dir/log"; : > "$log"
@@ -5940,6 +5968,7 @@ test_repeated_cycles_reuse_one_workspace_no_orphans
 test_plugin_dock_flat_spawn_and_kill_leave_no_plugin_only_tab
 test_projection_create_prunes_a_plugin_pane_docked_after_the_first_pass
 test_plugin_dock_late_on_flat_create_is_pruned
+test_plugin_redock_after_activation_keeps_flat_task_resolvable
 test_plugin_prune_never_closes_an_unregistered_split
 test_projection_create_converges_past_a_docked_plugin_pane
 test_projection_create_refuses_an_unregistered_docked_pane
