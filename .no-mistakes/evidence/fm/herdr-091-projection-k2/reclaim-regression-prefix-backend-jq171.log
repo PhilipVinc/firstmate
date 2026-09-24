@@ -1,0 +1,2 @@
+not ok - reclaim with a docking plugin should converge: warning: herdr presentation reclaim for dock-r1 did not converge exactly; spawning flat
+rc=1

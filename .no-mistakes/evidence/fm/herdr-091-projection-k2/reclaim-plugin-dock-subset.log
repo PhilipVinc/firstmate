@@ -1,0 +1,18 @@
+ok - herdr stale registration: presentation reclaim never closes a stale-registration pane
+ok - herdr plugin dock: flat spawn and respawn keep exactly the task pane, recovery resolves it, and kill leaves no plugin-only tab
+ok - herdr plugin dock: a plugin pane docked after the first passing read is pruned before projection success
+ok - herdr plugin dock: a plugin pane docked late into a flat task tab is pruned before create_task returns
+ok - herdr plugin dock: a plugin pane re-docked after activation never hides a flat task from discovery or respawn
+ok - herdr plugin dock: only Herdr-registered plugin panes are pruned; a captain's split survives the task close
+ok - herdr plugin dock: a projected workspace converges to exactly one task pane past docked plugin panes
+ok - herdr plugin dock: a projected restart reclaim converges past a docked plugin pane
+ok - herdr plugin dock: an unregistered docked pane keeps the projection unconverged and is never closed
+ok - fm_backend_herdr_create_task: closes and replaces a same-labeled tab whose pane is dead (pane_not_found)
+ok - fm_backend_herdr_create_task: closes and replaces a same-labeled tab whose pane is alive but hosts no registered agent (a restored plain shell)
+ok - fm_backend_herdr_create_task: closes every confirmed same-labeled husk only after creating the replacement
+ok - fm_backend_herdr_create_task: refuses success when a preexisting husk tab remains after replacement
+ok - fm_backend_herdr_create_task: creates the replacement tab BEFORE closing the husk tab, never the reverse
+ok - herdr presentation create: exact response IDs yield one normal task pane with no workspace-close authority
+ok - herdr presentation create: concurrent same-label tabs are never prune targets
+ok - herdr presentation reclaim: legacy, cross-home, ambiguous, live/unknown, and focus-unknown cases refuse without mutation
+ok - herdr presentation reclaim: exact agent-free husk survives duplicate parent labels while its sibling stays untouched
