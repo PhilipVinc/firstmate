@@ -1,0 +1,7 @@
+ok - herdr plugin dock: flat spawn and respawn keep exactly the task pane, recovery resolves it, and kill leaves no plugin-only tab
+ok - herdr plugin dock: a plugin pane docked late into a flat task tab is pruned before create_task returns
+ok - herdr plugin dock: only Herdr-registered plugin panes are pruned; a captain's split survives the task close
+ok - herdr plugin dock: a projected workspace converges to exactly one task pane past docked plugin panes
+ok - herdr plugin dock: a plugin pane docked after the first passing read is pruned before projection success
+ok - herdr plugin dock: an unregistered docked pane keeps the projection unconverged and is never closed
+exit=0

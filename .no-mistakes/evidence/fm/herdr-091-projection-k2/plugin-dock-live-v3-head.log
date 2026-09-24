@@ -1,0 +1,69 @@
+
+### environment (head3: code=3e80e2d)
+herdr: herdr 0.9.1
+1 plugin installed:
+- herdr-sidebar (herdr-sidebar) enabled [local:/tmp/fmtest-home.Z0nM/plugin-src/herdr-sidebar]
+  config: /tmp/fmtest-home.Z0nM/.config/herdr/plugins/config/herdr-sidebar
+lab session: fm-lab-pdhead3-3506223-23875
+
+### S0 control: a raw --no-focus tab create in this lab gets a herdr-sidebar pane docked
+control tab panes: [{"pane_id":"w1:p4","label":"Sidebar","plugin_tokens":["herdr-sidebar-explorer","herdr-sidebar-git"]},{"pane_id":"w1:p3","label":null,"plugin_tokens":[]}]
+PASS: herdr-sidebar docks its explorer pane into a fresh tab (the reported trigger is live here)
+
+### S2 flat spawn (config off): task tab holds exactly the task pane; list_live and resolve_bare_selector find it
+meta pane=w2:p3 tab=w2:t2; tab panes after 2s: [{"pane_id":"w2:p3","label":null,"plugin_tokens":[]}]
+PASS: flat task tab = exactly the task pane
+list_live: fm-lab-pdhead3-3506223-23875:w2:p3	fm-flat1
+PASS: list_live -> w2:p3
+resolve_bare_selector fm-flat1: fm-lab-pdhead3-3506223-23875:w2:p3
+PASS: resolve_bare_selector -> w2:p3
+
+### S1 projected spawn with UNCONFIGURED herdr-presentation-spaces (the reported failure)
+spawn rc=0; journal:
+  version=2
+  task_id=tangent-geom-s1
+  projection_id=VL30Uhps1MHnnMpaeyIjeQ
+  home=/tmp/fmtest-pd2.5pIm/home
+  session=fm-lab-pdhead3-3506223-23875
+  workspace_id=w3
+  tab_id=w3:t2
+  pane_id=w3:p3
+  parent_workspace_id=w2
+  parent_label=firstmate
+  workspace_label=└ tangent-geom-s1 · p:VL30Uhps1MHnnMpaeyIjeQ
+  task_label=fm-tangent-geom-s1
+workspace label: └ tangent-geom-s1 · p:VL30Uhps1MHnnMpaeyIjeQ
+projected workspace panes after 2s: [{"pane_id":"w3:p3","tab_id":"w3:t2","label":null,"plugin_tokens":[]}]
+PASS: projected spawn succeeded; workspace holds exactly the task pane; journal version 2
+
+### S3 husk respawn: create_task with the same label over the agent-less flat1 tab replaces it; new tab is exactly one pane
+husk classification of w2:p3: no-agent
+create_task rc=0 out=w2:t3 w2:p6
+old tab panes: []
+new tab panes: [{"pane_id":"w2:p6","label":null,"plugin_tokens":[]}]
+PASS: husk replaced; replacement tab holds exactly its task pane
+
+### S4 captain focuses the flat task tab: does herdr-sidebar re-dock, and do discovery/respawn still work?
+tab panes after focus: [{"pane_id":"w2:p6","label":null,"plugin_tokens":[]}]
+PASS: no re-dock on focus
+
+### S5 adversarial: an unregistered captain split in the task tab is never closed by the plugin prune/settle
+split pane: w2:p8; tab panes: [{"pane_id":"w2:p6","label":null,"plugin_tokens":[]},{"pane_id":"w2:p8","label":null,"plugin_tokens":[]}]
+settle rc=1; tab panes after settle: [{"pane_id":"w2:p6","label":null,"plugin_tokens":[]},{"pane_id":"w2:p8","label":null,"plugin_tokens":[]}]
+PASS: settle refused to converge and the captain split w2:p8 survived
+direct probe: {"error":{"code":"plugin_pane_not_found","message":"plugin pane not found"},"id":"cli:plugin"}
+PASS: Herdr refused plugin pane close on the split
+workspace w2 panes before flat teardown: ["w2:p6","w2:p8"]
+
+### S6 teardown: projected workspace removed; flat task pane closed; no plugin-only tab left behind
+projected ws after focus: [{"pane_id":"w3:p5","tab_id":"w3:t2","label":"Sidebar","plugin_tokens":["herdr-sidebar-explorer","herdr-sidebar-git"]},{"pane_id":"w3:p3","tab_id":"w3:t2","label":null,"plugin_tokens":[]}]
+PASS: projected workspace removed
+PASS: flat task pane closed
+workspace w2 after flat teardown: [{"pane_id":"w2:p8","tab_id":"w2:t3","label":null,"plugin_tokens":[]}]
+PASS: captain split survived task teardown
+workspaces now: [{"id":"w2","label":"firstmate"}]
+
+### summary
+failures: 0
+lab fm-lab-pdhead3-3506223-23875 torn down
+exit=0

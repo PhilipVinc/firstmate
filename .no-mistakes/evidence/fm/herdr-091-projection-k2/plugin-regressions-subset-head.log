@@ -1,0 +1,14 @@
+ok - herdr plugin dock: flat spawn and respawn keep exactly the task pane, recovery resolves it, and kill leaves no plugin-only tab
+ok - herdr plugin dock: a plugin pane docked after the first passing read is pruned before projection success
+ok - herdr plugin dock: a plugin pane docked late into a flat task tab is pruned before create_task returns
+ok - herdr plugin dock: a plugin pane re-docked after activation never hides a flat task from discovery or respawn
+ok - herdr plugin dock: only Herdr-registered plugin panes are pruned; a captain's split survives the task close
+ok - herdr plugin dock: a projected workspace converges to exactly one task pane past docked plugin panes
+ok - herdr plugin dock: an unregistered docked pane keeps the projection unconverged and is never closed
+ok - fm_backend_herdr_create_task: refuses a duplicate tab label (herdr's own tab create has no uniqueness check)
+ok - fm_backend_herdr_create_task: a same-labeled tab with a live (even idle) registered agent still refuses exactly as before
+ok - fm_backend_herdr_create_task: scans every same-labeled tab and refuses if any duplicate is live
+ok - fm_backend_herdr_create_task: refuses success when a preexisting husk tab remains after replacement
+ok - fm_backend_herdr_create_task: refuses (fail-safe) rather than guessing when the duplicate's agent state cannot be classified confidently
+subset done
+exit=0

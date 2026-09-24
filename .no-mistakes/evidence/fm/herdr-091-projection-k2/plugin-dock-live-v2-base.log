@@ -1,0 +1,39 @@
+
+### environment (base: code=ac2ed3b)
+herdr: herdr 0.9.1
+1 plugin installed:
+- herdr-sidebar (herdr-sidebar) enabled [local:/tmp/fmtest-home.Z0nM/plugin-src/herdr-sidebar]
+  config: /tmp/fmtest-home.Z0nM/.config/herdr/plugins/config/herdr-sidebar
+lab session: fm-lab-pdbase-3401629-1768
+
+### S0 control: a raw --no-focus tab create in this lab gets a herdr-sidebar pane docked
+control tab panes: [{"pane_id":"w1:p4","label":"Sidebar","plugin_tokens":["herdr-sidebar-explorer","herdr-sidebar-git"]},{"pane_id":"w1:p3","label":null,"plugin_tokens":[]}]
+PASS: herdr-sidebar docks its explorer pane into a fresh tab (the reported trigger is live here)
+
+### S2 flat spawn (config off): task tab holds exactly the task pane; list_live and resolve_bare_selector find it
+meta pane=w2:p3 tab=w2:t2; tab panes after 2s: [{"pane_id":"w2:p4","label":"Sidebar","plugin_tokens":["herdr-sidebar-explorer","herdr-sidebar-git"]},{"pane_id":"w2:p3","label":null,"plugin_tokens":[]}]
+FAIL: flat task tab shape: [{"pane_id":"w2:p4","label":"Sidebar","plugin_tokens":["herdr-sidebar-explorer","herdr-sidebar-git"]},{"pane_id":"w2:p3","label":null,"plugin_tokens":[]}]
+list_live: fm-lab-pdbase-3401629-1768:w2:p4	fm-flat1
+FAIL: list_live missed flat1
+resolve_bare_selector fm-flat1: fm-lab-pdbase-3401629-1768:w2:p4
+FAIL: resolve_bare_selector: fm-lab-pdbase-3401629-1768:w2:p4
+
+### S1 projected spawn with UNCONFIGURED herdr-presentation-spaces (the reported failure)
+FAIL: projected spawn failed rc!=0
+stderr:
+  warning: /tmp/fmtest-pd2.8ObE/home/data/tangent-geom-s1/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+  error: disposable herdr presentation workspace did not converge to exactly one task pane
+state:
+flat1.meta
+home-summary.json
+tangent-geom-s1.herdr-presentation
+  journal: version=1
+  journal: task_id=tangent-geom-s1
+  journal: projection_id=8vmr2EWhOzuAyk9Dmgwd8w
+workspaces: [{"id":"w2","label":"firstmate"},{"id":"w3","label":"└ tangent-geom-s1 · p:8vmr2EWhOzuAyk9Dmgwd8w"}]
+leftover w3 panes: [{"pane_id":"w3:p4","tab_id":"w3:t2","label":"Sidebar","plugin_tokens":["herdr-sidebar-explorer","herdr-sidebar-git"]}]
+
+### summary
+failures: 4
+lab fm-lab-pdbase-3401629-1768 torn down
+exit=4

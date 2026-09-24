@@ -1,0 +1,2 @@
+not ok - the seeded tab and its plugin pane should be pruned, leaving only the task tab: {"next":6,"workspaces":[{"workspace_id":"w1","label":"firstmate"}],"tabs":[{"tab_id":"w1:t2","label":"1","workspace_id":"w1","pane_id":"w1:p2"},{"tab_id":"w1:t4","label":"fm-dock","workspace_id":"w1","pane_id":"w1:p4"}],"extra_panes":[{"pane_id":"w1:p5","tab_id":"w1:t4","workspace_id":"w1","plugin":true}],"agent_status":{}}
+exit=1

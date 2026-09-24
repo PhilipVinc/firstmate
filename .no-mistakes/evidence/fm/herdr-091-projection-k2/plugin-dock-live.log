@@ -1,0 +1,72 @@
+
+### environment
+herdr: herdr 0.9.1
+1 plugin installed:
+- herdr-sidebar (herdr-sidebar) enabled [local:/tmp/fmtest-home.Z0nM/plugin-src/herdr-sidebar]
+  config: /tmp/fmtest-home.Z0nM/.config/herdr/plugins/config/herdr-sidebar
+lab session: fm-lab-plugdock-3028221-20691
+
+### S0 control: a raw --no-focus tab create in this lab gets an Explorer plugin pane docked by herdr-sidebar
+control tab panes: [{"pane_id":"w1:p4","label":"Sidebar","tokens":{"herdr-sidebar-explorer":"1790213122","herdr-sidebar-git":"1790213122"}},{"pane_id":"w1:p3","label":null,"tokens":null}]
+FAIL: control did not reproduce the plugin dock; later scenarios would not exercise the fix
+
+### S1 flat create (config off): task tab holds exactly the task pane despite the plugin
+meta pane=w2:p3 tab=w2:t2; tab panes after 2s: [{"pane_id":"w2:p3","label":null,"tokens":null}]
+PASS: flat task tab = exactly the recorded task pane, no Explorer
+
+### S2 recovery discovery: fm_backend_herdr_list_live names the flat task pane
+list_live: fm-lab-plugdock-3028221-20691:w2:p3	fm-flat1
+PASS: list_live resolves flat1 to its task pane
+
+### S3 projected create with UNCONFIGURED herdr-presentation-spaces (the reported failure)
+spawn stderr:
+  warning: /tmp/fmtest-pd.XOyN/home/data/tangent-geom-s1/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+journal:
+  version=2
+  task_id=tangent-geom-s1
+  projection_id=v4222o2_BgftYmUA2hoX7g
+  home=/tmp/fmtest-pd.XOyN/home
+  session=fm-lab-plugdock-3028221-20691
+  workspace_id=w3
+  tab_id=w3:t2
+  pane_id=w3:p3
+  parent_workspace_id=w2
+  parent_label=firstmate
+  workspace_label=└ tangent-geom-s1 · p:v4222o2_BgftYmUA2hoX7g
+  task_label=fm-tangent-geom-s1
+workspace label: └ tangent-geom-s1 · p:v4222o2_BgftYmUA2hoX7g
+jq: error: syntax error, unexpected '}', expecting ':' (Unix shell quoting issues?) at <top-level>, line 1:
+[.result.tabs[] | {tab_id,label}]                               
+jq: 1 compile error
+tabs: 
+workspace panes after 2s: [{"pane_id":"w3:p3","tab_id":"w3:t2","label":null,"tokens":null}]
+PASS: projected workspace converged to exactly the task pane; journal advanced to version 2
+task pane content (first lines):
+t-geom-s1+8a935f98f64785d549e1be
+c997856f33e3ce79beac811d77a4b2df
+0232caed2f/launch.s1790213135.30
+32620.32765.sh'
+
+
+### S4 projected kill with Explorer re-docked: focusing the task tab makes herdr-sidebar re-dock; teardown leaves no Explorer-only workspace
+after focusing task tab: [{"pane_id":"w3:p5","tab_id":"w3:t2","label":"Sidebar","tokens":{"herdr-sidebar-explorer":"1790213139","herdr-sidebar-git":"1790213139"}},{"pane_id":"w3:p3","tab_id":"w3:t2","label":null,"tokens":null}]
+PASS: projected workspace removed by teardown (no Explorer-only workspace left)
+jq: error: syntax error, unexpected '}', expecting ':' (Unix shell quoting issues?) at <top-level>, line 1:
+[.result.workspaces[] | {workspace_id,label}]                                           
+jq: 1 compile error
+workspaces now: 
+
+### S5 adversarial: an unregistered captain split beside the flat task pane is never closed by the plugin prune
+captain split pane: w2:p6 ({"id":"cli:pane:split","result":{"pane":{"agent_status":"unknown","cwd":"/tmp/fmtest-home.Z0nM/.treehouse/project-c7fbe7/1/project","focused":false,"foreground_cwd":"/tmp/fmtest-home.Z0nM/.treehouse/project-c7fbe7/1/project","pane_id":"w2:p6","revision":0,"scroll":{"max_of
+flat tab before teardown: [{"pane_id":"w2:p5","label":"Sidebar","tokens":{"herdr-sidebar-explorer":"1790213152","herdr-sidebar-git":"1790213152"}},{"pane_id":"w2:p3","label":null,"tokens":null},{"pane_id":"w2:p6","label":null,"tokens":null}]
+{"error":{"code":"workspace_not_found","message":"workspace w2 not found"},"id":"cli:pane:list"}
+flat tab after teardown: 
+FAIL: captain split pane was closed or never created
+PASS: flat task pane closed by teardown
+direct probe: plugin pane close on the captain split pane:
+  {"error":{"code":"plugin_pane_not_found","message":"plugin pane not found"},"id":"cli:plugin"}
+FAIL: split pane gone after probe
+
+### summary
+failures: 3
+lab fm-lab-plugdock-3028221-20691 torn down
