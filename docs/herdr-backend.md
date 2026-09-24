@@ -373,7 +373,7 @@ Tests use thin compatibility wrappers in `tests/herdr-test-safety.sh` and never 
 - Mid-session secondmate agent-process liveness is not implemented.
 - Only tmux and Herdr can host the away-mode supervisor terminal.
 - A plugin hook that focuses the pane it docks beside moves the captain's view to the new task tab after Firstmate's own focus checks finish; `herdr-sidebar` 0.13.0 does this even for `--no-focus` creates, and Firstmate cannot prevent that asynchronous focus change.
-- A restored task tab that holds a plugin pane beside its husk is ambiguous, so respawning into it refuses until the tab is closed by hand.
+- A restored task tab holding a pane no plugin registered beside its husk is ambiguous, so respawning into it refuses until the tab is closed by hand.
 
 ## Regression entry points
 
