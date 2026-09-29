@@ -27,6 +27,8 @@ set -u
 
 SPAWN="$ROOT/bin/fm-spawn.sh"
 TMP_ROOT=$(fm_test_tmproot fm-spawn-worktree-settle)
+# Cases below expect the default bound unless they set their own.
+unset FM_SPAWN_ISOLATION_WAIT_SECS
 
 # make_settle_fakebin <dir> builds a fake tmux whose `#{pane_current_path}`
 # query returns FM_FAKE_PANE_STALE for the first FM_FAKE_PANE_STALE_READS
@@ -241,10 +243,12 @@ test_isolation_wait_is_configurable() {
   pass "FM_SPAWN_ISOLATION_WAIT_SECS bounds the isolation wait"
 }
 
-# A malformed bound refuses before any pane is launched or read.
+# A malformed bound, including an explicitly empty one or a bound too short for
+# the two matching readings isolation needs, refuses before any pane is launched
+# or read.
 test_invalid_isolation_wait_refuses() {
   local rec id out status bad
-  for bad in abc 0 -5 1.5 007; do
+  for bad in '' 1 abc 0 -5 1.5 007; do
     id=settle-wait-bad-z6
     rm -rf "$TMP_ROOT/settle-wait-bad"
     rec=$(make_primary_case settle-wait-bad "$id" 0)
@@ -252,7 +256,7 @@ test_invalid_isolation_wait_refuses() {
     out=$(FM_SPAWN_ISOLATION_WAIT_SECS=$bad run_settle_spawn "$id")
     status=$?
     [ "$status" -ne 0 ] || fail "spawn accepted FM_SPAWN_ISOLATION_WAIT_SECS='$bad'"$'\n'"$out"
-    assert_contains "$out" "FM_SPAWN_ISOLATION_WAIT_SECS must be a positive integer" \
+    assert_contains "$out" "FM_SPAWN_ISOLATION_WAIT_SECS must be an integer number of seconds of at least 2" \
       "spawn did not explain the malformed bound '$bad'"
     [ ! -e "$COUNTFILE" ] || fail "malformed bound '$bad' still read the pane"
     [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "malformed bound '$bad' published task metadata"

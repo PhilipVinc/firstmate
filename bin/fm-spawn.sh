@@ -236,8 +236,9 @@
 #   itself a linked worktree of the project repository still launches. A pane
 #   that never reaches an isolated worktree refuses at the end of that wait,
 #   naming the last path seen and why it was rejected.
-#   FM_SPAWN_ISOLATION_WAIT_SECS (positive integer, default 60) bounds that wait
-#   in seconds; any other value refuses before anything is launched.
+#   FM_SPAWN_ISOLATION_WAIT_SECS (integer of at least 2, default 60) bounds that
+#   wait in seconds; any other value, including empty, refuses before anything
+#   is launched.
 #   That placement is proven only at launch. Every ship or scout pane therefore
 #   also receives `export FM_TASK_ID=<task-id>` before the launch command, on
 #   the same channel as GOTMPDIR, and bin/fm-test-run.sh refuses to execute the
@@ -483,10 +484,10 @@ case "${1:-}" in
   ;;
 esac
 
-ISOLATION_WAIT_SECS=${FM_SPAWN_ISOLATION_WAIT_SECS:-60}
+ISOLATION_WAIT_SECS=${FM_SPAWN_ISOLATION_WAIT_SECS-60}
 case "$ISOLATION_WAIT_SECS" in
-'' | *[!0-9]* | 0 | 0*)
-  echo "error: FM_SPAWN_ISOLATION_WAIT_SECS must be a positive integer number of seconds, got '$ISOLATION_WAIT_SECS'" >&2
+'' | *[!0-9]* | 0* | 1)
+  echo "error: FM_SPAWN_ISOLATION_WAIT_SECS must be an integer number of seconds of at least 2 (isolation needs two matching pane readings), got '$ISOLATION_WAIT_SECS'" >&2
   exit 2
   ;;
 esac
