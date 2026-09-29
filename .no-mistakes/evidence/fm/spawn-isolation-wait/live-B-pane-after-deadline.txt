@@ -1,0 +1,7 @@
+@0 lab /tmp/fmlab-iw.c7DboY
+@1 fm-lab-iw-default /tmp/fmlab-iw.c7DboY/treehouse/.treehouse/notes-8540f2/1/notes
+treehouse get
+bash-5.1$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /tmp/fmlab-iw.c7DboY/treehouse/.treehouse/notes-8540f2/1/notes. Type 'exit' to return.
+bash-5.1$

@@ -1,0 +1,4 @@
+$ FM_SPAWN_ISOLATION_WAIT_SECS=unset fm-spawn.sh lab-iw-default projects/notes --mode local-only --yolo on --harness 'bash -c "echo LAB-WORKER-LAUNCHED; exec sleep 900"'
+error: treehouse get did not enter an isolated worktree within 60s (last seen '/tmp/fmlab-iw.c7DboY/home/projects/notes': it is the spawning project itself; spawning project '/tmp/fmlab-iw.c7DboY/home/projects/notes'); inspect window firstmate:fm-lab-iw-default
+exit=1 elapsed=62s
+(no state/lab-iw-default.meta published)

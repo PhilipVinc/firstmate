@@ -1,0 +1,5 @@
+$ FM_SPAWN_ISOLATION_WAIT_SECS=abc fm-spawn.sh lab-iw-bad projects/notes --mode local-only --yolo on --harness 'bash -c "echo LAB-WORKER-LAUNCHED; exec sleep 900"'
+error: FM_SPAWN_ISOLATION_WAIT_SECS must be a positive integer number of seconds, got 'abc'
+exit=2 elapsed=0s
+(no state/lab-iw-bad.meta published)
+lab

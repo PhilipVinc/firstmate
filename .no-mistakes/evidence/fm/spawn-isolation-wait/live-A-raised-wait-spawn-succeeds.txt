@@ -1,0 +1,21 @@
+$ FM_SPAWN_ISOLATION_WAIT_SECS=150 fm-spawn.sh lab-iw-raised projects/notes --mode local-only --yolo on --harness 'bash -c "echo LAB-WORKER-LAUNCHED; exec sleep 900"'
+spawned lab-iw-raised harness=bash kind=ship mode=local-only yolo=on window=firstmate:fm-lab-iw-raised worktree=/tmp/fmlab-iw.c7DboY/treehouse/.treehouse/notes-8540f2/1/notes
+exit=0 elapsed=85s
+--- state/lab-iw-raised.meta
+window=firstmate:fm-lab-iw-raised
+worktree=/tmp/fmlab-iw.c7DboY/treehouse/.treehouse/notes-8540f2/1/notes
+kind=ship
+--- tmux windows
+lab /tmp/fmlab-iw.c7DboY
+fm-lab-iw-raised /tmp/fmlab-iw.c7DboY/treehouse/.treehouse/notes-8540f2/1/notes
+--- worker pane
+treehouse get
+bash-5.1$ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /tmp/fmlab-iw.c7DboY/treehouse/.treehouse/notes-8540f2/1/notes. Type 'exit' to return.
+bash-5.1$ cd -- '/tmp/fmlab-iw.c7DboY/treehouse/.treehouse/notes-8540f2/1/notes'
+bash-5.1$ export GOTMPDIR=/tmp/fm-lab-iw-raised/gotmp
+bash-5.1$ export COMPACT_ADVISER_DISABLE=1
+bash-5.1$ export FM_TASK_ID=lab-iw-raised
+bash-5.1$ . '/tmp/fm-lab-iw-raised+2736cb705c1299db503bc4d93b6e2a4417b8dce5837338533a59eac1a43d00f2/launch.s1790668160.3500872.24377.sh'
+LAB-WORKER-LAUNCHED

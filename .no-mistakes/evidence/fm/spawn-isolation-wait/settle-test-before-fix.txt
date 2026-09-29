@@ -1,0 +1,9 @@
+ok - a single transient stale pane_current_path read is not accepted as the worktree
+ok - an already-settled pane confirms on the next read, not a whole extra cycle
+ok - a transient primary-checkout pane read is not accepted as the worktree
+ok - a pane stuck on the primary checkout fails loudly at the deadline
+not ok - the refusal did not report the configured bound (missing: 'within 3s')
+--- output ---
+warning: /tmp/fm-spawn-worktree-settle.85qolw/settle-wait-configured/home/data/settle-wait-configured-z5/launch-brief.md records no ship branch; defaulting to legacy branch fm/settle-wait-configured-z5
+warning: /tmp/fm-spawn-worktree-settle.85qolw/settle-wait-configured/home/data/settle-wait-configured-z5/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: treehouse get did not enter an isolated worktree within 60s (last seen '/tmp/fm-spawn-worktree-settle.85qolw/settle-wait-configured/primary': it is the repository's primary checkout (its git dir is the spawning project's common git dir); spawning project '/tmp/fm-spawn-worktree-settle.85qolw/settle-wait-configured/mate'); inspect window firstmate:fm-settle-wait-configured-z5
